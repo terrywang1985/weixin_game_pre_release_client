@@ -11,33 +11,46 @@ import RoomManager from './RoomManager.js';
 export default class Main {
   constructor() {
     console.log("=== 微信小游戏启动 ===");
-    
+    // 屏幕调试日志开关（true=显示，false=关闭）
+    this.enableDebugLogOnScreen = false;
+
+    // 微信真机调试时自动开启详细 JS 日志（建议真机排查问题时开启）
+    if (typeof wx !== 'undefined' && wx.setEnableDebug) {
+      wx.setEnableDebug({ enableDebug: false});
+      // 注：如需关闭可改为 false
+    }
+
     // 在微信小游戏环境中获取canvas
     this.canvas = this.getCanvas();
     this.ctx = this.canvas.getContext('2d');
-    
+
     // 设置canvas尺寸
     this.setupCanvas();
-    
+
     // 初始化网络管理器
     this.networkManager = new NetworkManager();
-    
+
+    // 绑定调试日志画布（如开启）
+    if (this.enableDebugLogOnScreen) {
+      this.networkManager.bindDebugCanvas(this.canvas);
+    }
+
     // 初始化UI页面
     this.mainMenu = new MainMenu(this.canvas, this.networkManager);
     this.roomList = new RoomList(this.canvas, this.networkManager);
     this.roomManager = new RoomManager(this.canvas, this.networkManager);
-    
+
     // 当前活动页面
     this.currentPage = null;
-    
+
     // 加载状态
     this.isLoading = true;
     this.loadingMessage = "正在连接服务器...";
-    
+
     // 防止错误日志刷屏的防抖机制
     this.lastErrorLogTime = 0;
     this.errorLogInterval = 5000; // 5秒内最多输出一次错误日志
-    
+
     this.init();
     this.bindEvents();
     this.startGameLoop();
@@ -486,27 +499,24 @@ export default class Main {
   // 渲染游戏画面
   render() {
     if (!this.canvas || !this.ctx) return;
-    
+
     // 清空画布
     this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
-    
+
     // 绘制加载画面或当前页面
     if (this.isLoading) {
       this.drawLoadingScreen();
     } else if (this.currentPage && typeof this.currentPage.render === 'function') {
       this.currentPage.render();
     } else {
-      // 当currentPage为null时，检查是否需要特殊处理
+      // ...existing code...
       const currentState = GameStateManager.getCurrentState();
-      
       if (currentState === GameStateManager.GAME_STATES.IN_ROOM || 
           currentState === GameStateManager.GAME_STATES.IN_GAME) {
-        // RoomManager会根据状态自动渲染对应界面
         if (this.roomManager && this.roomManager.currentRoom && 
             typeof this.roomManager.currentRoom.render === 'function') {
           this.roomManager.currentRoom.render();
         } else {
-          // RoomManager还未准备好，绘制等待提示
           this.ctx.fillStyle = '#2c3e50';
           this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
           this.ctx.fillStyle = '#ffffff';
@@ -516,10 +526,14 @@ export default class Main {
           this.ctx.fillText('正在进入房间...', this.canvas.width / 2, this.canvas.height / 2);
         }
       } else {
-        // 其他情况绘制默认背景
         this.ctx.fillStyle = '#2c3e50';
         this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
       }
+    }
+
+    // 屏幕调试日志渲染（如开启）
+    if (this.enableDebugLogOnScreen) {
+      this.networkManager.drawDebugLog();
     }
   }
   

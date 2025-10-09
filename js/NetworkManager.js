@@ -242,15 +242,10 @@ class NetworkManager {
     // WebSocket事件处理
     async onWebSocketOpen(event) {
         this.isConnected = true;
-        console.log("WebSocket连接成功");
-        
-        // 更新网络状态
-        GameStateManager.updateNetworkStatus({
-            isConnected: true
-        });
-        
+        this.debugLog('WebSocket连接成功');
+        GameStateManager.updateNetworkStatus({ isConnected: true });
         this.emit('connected');
-        
+        this.debugLog('准备开始认证流程');
         // 连接成功后立即进行认证
         await this.websocketAuth();
     }
@@ -398,38 +393,31 @@ class NetworkManager {
     // WebSocket认证
     async websocketAuth() {
         if (!this.sessionToken) {
-            console.error("没有有效的session_token，无法进行认证");
+            this.debugLog("没有有效的session_token，无法进行认证");
             return;
         }
-        
-        console.log("初始化Protobuf管理器...");
-        
-        // 初始化protobuf管理器
+        this.debugLog("初始化Protobuf管理器...");
         try {
             await this.protobuf.initialize();
-            console.log("Protobuf管理器初始化成功");
+            this.debugLog("Protobuf管理器初始化成功");
         } catch (error) {
-            console.error("Protobuf管理器初始化失败:", error);
+            this.debugLog("Protobuf管理器初始化失败:" + error);
             return;
         }
-        
-        console.log("发送WebSocket认证请求...");
-        
+        this.debugLog("发送WebSocket认证请求...");
         let deviceId;
         if (this.USE_PERSISTENT_IDENTITY) {
-            // 发布模式：使用持久化设备ID
             deviceId = this.getOrCreatePersistentDeviceId();
         } else {
-            // 测试模式：使用临时设备ID
             deviceId = "wxgame_" + this.generateDeviceId();
         }
         const finalPacket = this.protobuf.createAuthRequest(this.sessionToken, deviceId);
-        
+        this.debugLog('认证包长度: ' + (finalPacket && finalPacket.length));
         if (this.isWebSocketConnected()) {
             this.sendWebSocketMessage(finalPacket);
-            console.log("认证请求已发送");
+            this.debugLog("认证请求已发送");
         } else {
-            console.error("WebSocket未连接，无法发送认证请求");
+            this.debugLog("WebSocket未连接，无法发送认证请求");
         }
     }
     
@@ -571,18 +559,31 @@ class NetworkManager {
     
     // 发送WebSocket消息的通用方法
     sendWebSocketMessage(data) {
+        this.debugLog('sendWebSocketMessage: ' + (data && data.length ? 'length=' + data.length : typeof data));
         if (this.isWebSocketConnected()) {
             if (typeof wx !== 'undefined') {
-                // 微信小游戏环境
+                // 微信小游戏环境，确保数据类型正确
+                let sendData;
+                if (data instanceof ArrayBuffer) {
+                    // ArrayBuffer 转换为 Uint8Array
+                    sendData = new Uint8Array(data);
+                } else if (data instanceof Uint8Array) {
+                    sendData = data;
+                } else {
+                    this.debugLog('警告：未知数据类型 ' + typeof data);
+                    sendData = data;
+                }
+                
                 this.websocket.send({
-                    data: data
+                    data: sendData.buffer || sendData
                 });
+                this.debugLog('微信小游戏 send 完成，数据类型: ' + (sendData.constructor.name));
             } else {
-                // 浏览器环境
                 this.websocket.send(data);
+                this.debugLog('浏览器 send 完成');
             }
         } else {
-            console.error("WebSocket未连接，无法发送消息");
+            this.debugLog('WebSocket未连接，无法发送消息');
         }
     }
     
@@ -761,6 +762,41 @@ class NetworkManager {
             this.websocket = null;
         }
         this.isConnected = false;
+    }
+    
+    // 屏幕调试日志功能
+    debugMessages = [];
+    maxDebugMessages = 10;
+    debugCanvas = null;
+    debugCtx = null;
+
+    debugLog(msg) {
+        if (typeof msg !== 'string') msg = JSON.stringify(msg);
+        this.debugMessages.push(`[${new Date().toLocaleTimeString()}] ${msg}`);
+        if (this.debugMessages.length > this.maxDebugMessages) {
+            this.debugMessages.shift();
+        }
+        this.drawDebugLog();
+    }
+
+    bindDebugCanvas(canvas) {
+        this.debugCanvas = canvas;
+        this.debugCtx = canvas.getContext('2d');
+    }
+
+    drawDebugLog() {
+        if (!this.debugCtx) return;
+        this.debugCtx.save();
+        this.debugCtx.globalAlpha = 0.7;
+        this.debugCtx.fillStyle = '#222';
+        this.debugCtx.fillRect(0, 0, this.debugCanvas.width, 20 + this.maxDebugMessages * 18);
+        this.debugCtx.globalAlpha = 1.0;
+        this.debugCtx.font = '14px monospace';
+        this.debugCtx.fillStyle = '#fff';
+        for (let i = 0; i < this.debugMessages.length; i++) {
+            this.debugCtx.fillText(this.debugMessages[i], 10, 20 + i * 18);
+        }
+        this.debugCtx.restore();
     }
     
     // 处理认证响应
