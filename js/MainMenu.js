@@ -277,9 +277,8 @@ class MainMenu {
         if (typeof wx !== 'undefined' && wx.showModal) {
             wx.showModal({
                 title: '加入房间',
-                content: '请输入朋友的房间号:',
                 editable: true,
-                placeholderText: '房间号',
+                placeholderText: '请输入朋友的房间号',
                 success: (res) => {
                     if (res.confirm && res.content) {
                         const roomId = res.content.trim();
@@ -291,7 +290,7 @@ class MainMenu {
                 }
             });
         } else if (typeof prompt !== 'undefined') {
-            // 浏览器环境
+            // 浏览器环境 - 显示空的输入框，提示文字作为第二个参数
             const roomId = prompt("请输入朋友的房间号:", "");
             
             if (roomId && roomId.trim()) {

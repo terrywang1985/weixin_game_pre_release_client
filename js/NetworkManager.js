@@ -9,6 +9,11 @@ import ErrorMessageHandler from './ErrorMessageHandler.js';
 
 class NetworkManager {
     constructor() {
+        // ===== 用户身份管理配置 =====
+        // 发布模式：设为 true，用户每次登录保持同一账号
+        // 测试模式：设为 false，每次登录都是新账号（便于测试）
+        this.USE_PERSISTENT_IDENTITY = false; // 改为 true 启用固定用户身份
+        
         this.websocket = null;
         this.isConnected = false;
         this.clientId = "";
@@ -60,14 +65,22 @@ class NetworkManager {
     async guestLogin(testSuffix = "") {
         console.log("开始HTTP游客登录...");
         
-        // 生成唯一的设备ID，确保多窗口不冲突
-        const baseDeviceId = "wxgame_" + this.generateDeviceId();
-        const windowInstance = Math.floor(Math.random() * 100000); // 窗口实例标识
-        const deviceId = testSuffix 
-            ? `${baseDeviceId}_test_${testSuffix}_${windowInstance}` 
-            : `${baseDeviceId}_${windowInstance}`;
+        let deviceId;
+        
+        if (this.USE_PERSISTENT_IDENTITY) {
+            // 发布模式：使用持久化设备ID
+            deviceId = this.getOrCreatePersistentDeviceId();
+        } else {
+            // 测试模式：使用临时设备ID（每次都是新号）
+            const baseDeviceId = "wxgame_" + this.generateDeviceId();
+            const windowInstance = Math.floor(Math.random() * 100000);
+            deviceId = testSuffix 
+                ? `${baseDeviceId}_test_${testSuffix}_${windowInstance}` 
+                : `${baseDeviceId}_${windowInstance}`;
+        }
         
         console.log("生成的设备ID:", deviceId);
+        console.log("当前使用模式:", this.USE_PERSISTENT_IDENTITY ? "发布模式（固定用户身份）" : "测试模式（每次新号）");
         
         const loginData = {
             device_id: deviceId,
@@ -402,7 +415,14 @@ class NetworkManager {
         
         console.log("发送WebSocket认证请求...");
         
-        const deviceId = "wxgame_" + this.generateDeviceId();
+        let deviceId;
+        if (this.USE_PERSISTENT_IDENTITY) {
+            // 发布模式：使用持久化设备ID
+            deviceId = this.getOrCreatePersistentDeviceId();
+        } else {
+            // 测试模式：使用临时设备ID
+            deviceId = "wxgame_" + this.generateDeviceId();
+        }
         const finalPacket = this.protobuf.createAuthRequest(this.sessionToken, deviceId);
         
         if (this.isWebSocketConnected()) {
@@ -595,6 +615,101 @@ class NetworkManager {
             : Math.floor(Math.random() * 1000000).toString(36);
             
         return `${timestamp}_${random1}_${random2}_${windowId}_${perfTime}`;
+    }
+    
+    // 获取或创建持久化设备ID（发布版本用）
+    getOrCreatePersistentDeviceId() {
+        const STORAGE_KEY = 'persistent_device_id';
+        
+        try {
+            // 尝试从本地存储获取现有的设备ID
+            let deviceId = null;
+            
+            if (typeof wx !== 'undefined' && wx.getStorageSync) {
+                // 微信小游戏环境
+                deviceId = wx.getStorageSync(STORAGE_KEY);
+            } else if (typeof localStorage !== 'undefined') {
+                // 浏览器环境（开发测试用）
+                deviceId = localStorage.getItem(STORAGE_KEY);
+            }
+            
+            if (deviceId) {
+                console.log("使用已保存的设备ID:", deviceId);
+                console.log("当前使用模式: 发布模式（固定用户身份）");
+                return deviceId;
+            }
+            
+            // 如果没有保存的ID，创建一个新的持久化ID
+            deviceId = this.createPersistentDeviceId();
+            
+            // 保存到本地存储
+            if (typeof wx !== 'undefined' && wx.setStorageSync) {
+                // 微信小游戏环境
+                wx.setStorageSync(STORAGE_KEY, deviceId);
+            } else if (typeof localStorage !== 'undefined') {
+                // 浏览器环境（开发测试用）
+                localStorage.setItem(STORAGE_KEY, deviceId);
+            }
+            
+            console.log("创建并保存新的设备ID:", deviceId);
+            console.log("当前使用模式: 发布模式（固定用户身份）");
+            return deviceId;
+            
+        } catch (error) {
+            console.error("持久化设备ID处理失败，使用临时ID:", error);
+            // 如果存储失败，回退到临时ID
+            return "wxgame_" + this.generateDeviceId();
+        }
+    }
+    
+    // 创建持久化设备ID
+    createPersistentDeviceId() {
+        // 尝试获取微信小游戏的用户标识
+        if (typeof wx !== 'undefined') {
+            try {
+                // 使用微信小游戏的系统信息作为设备特征
+                const systemInfo = wx.getSystemInfoSync();
+                const deviceFeature = [
+                    systemInfo.brand || '',
+                    systemInfo.model || '',
+                    systemInfo.system || '',
+                    systemInfo.platform || ''
+                ].join('_').replace(/[^a-zA-Z0-9_]/g, '');
+                
+                // 结合时间戳和随机数创建稳定的ID
+                const timestamp = Math.floor(Date.now() / 1000); // 秒级时间戳
+                const random = Math.random().toString(36).substr(2, 8);
+                
+                return `wxgame_${deviceFeature}_${timestamp}_${random}`;
+            } catch (error) {
+                console.warn("获取微信系统信息失败，使用备用方案:", error);
+            }
+        }
+        
+        // 备用方案：基于当前时间和随机数的持久化ID
+        const timestamp = Math.floor(Date.now() / 1000);
+        const random1 = Math.random().toString(36).substr(2, 8);
+        const random2 = Math.random().toString(36).substr(2, 6);
+        return `wxgame_persistent_${timestamp}_${random1}_${random2}`;
+    }
+    
+    // 清除持久化数据（开发测试用）
+    clearPersistentData() {
+        const STORAGE_KEY = 'persistent_device_id';
+        
+        try {
+            if (typeof wx !== 'undefined' && wx.removeStorageSync) {
+                // 微信小游戏环境
+                wx.removeStorageSync(STORAGE_KEY);
+                console.log("已清除微信小游戏存储的设备ID");
+            } else if (typeof localStorage !== 'undefined') {
+                // 浏览器环境
+                localStorage.removeItem(STORAGE_KEY);
+                console.log("已清除浏览器存储的设备ID");
+            }
+        } catch (error) {
+            console.error("清除持久化数据失败:", error);
+        }
     }
     
     // 网络请求方法 - 适配微信小游戏环境

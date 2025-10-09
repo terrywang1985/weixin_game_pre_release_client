@@ -352,7 +352,6 @@ class WaitingRoom {
         this.ctx.fillStyle = '#FFFFFF';
         // 确保房间ID是字符串格式显示
         const displayRoomId = this.roomId || "未知";
-        console.log("drawTitle: 显示房间ID:", displayRoomId, "原始值:", this.roomId);
         this.ctx.fillText(`房间号: ${displayRoomId}`, this.canvas.width / 2, baseY);
         
         this.ctx.font = '18px Arial';
