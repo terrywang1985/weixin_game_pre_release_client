@@ -113,40 +113,20 @@ class GameRoom {
     }
     
     bindEvents() {
-        // 微信小游戏触摸事件
+        this.setupEventListeners();
+    }
+    
+    setupEventListeners() {
+        // 微信小游戏环境中使用wx API处理事件
         if (typeof wx !== 'undefined') {
-            wx.onTouchStart((e) => {
+            // 使用wx.onTouchStart处理点击事件
+            wx.onTouchStart((res) => {
                 if (!this.isVisible) return;
                 
-                const touch = e.touches[0];
-                const touchX = touch.clientX;
-                const touchY = touch.clientY;
-                
-                this.handleClick(touchX, touchY);
-            });
-        } else {
-            // 浏览器环境的事件处理
-            this.canvas.addEventListener('click', (e) => {
-                if (!this.isVisible) return;
-                
-                const rect = this.canvas.getBoundingClientRect();
-                const mouseX = e.clientX - rect.left;
-                const mouseY = e.clientY - rect.top;
-                
-                this.handleClick(mouseX, mouseY);
-            });
-            
-            // 触摸事件（移动端浏览器支持）
-            this.canvas.addEventListener('touchstart', (e) => {
-                if (!this.isVisible) return;
-                
-                e.preventDefault();
-                const touch = e.touches[0];
-                const rect = this.canvas.getBoundingClientRect();
-                const touchX = touch.clientX - rect.left;
-                const touchY = touch.clientY - rect.top;
-                
-                this.handleClick(touchX, touchY);
+                if (res.touches && res.touches.length > 0) {
+                    const touch = res.touches[0];
+                    this.handleClick(touch.clientX, touch.clientY);
+                }
             });
         }
     }
@@ -256,8 +236,10 @@ class GameRoom {
                         icon: 'none',
                         duration: 2000
                     });
-                } else {
+                } else if (typeof alert !== 'undefined') {
                     alert(message);
+                } else {
+                    console.log("错误提示:", message);
                 }
                 return;
             }
@@ -294,15 +276,13 @@ class GameRoom {
         if (this.handCardArea && this.handCardArea.isVisible()) {
             // 检查点击坐标是否在手牌区域内
             if (this.handCardArea.isInHandCardArea(x, y)) {
+                // 直接调用手牌区域的点击处理方法
                 // 创建一个模拟的鼠标事件对象
-                const rect = this.canvas.getBoundingClientRect();
                 const simulatedEvent = {
-                    clientX: x + rect.left,
-                    clientY: y + rect.top,
+                    clientX: x,
+                    clientY: y,
                     preventDefault: () => {}
                 };
-                
-                // 直接调用手牌区域的点击处理方法
                 this.handCardArea.handleClick(simulatedEvent);
                 return;
             }
@@ -376,7 +356,7 @@ class GameRoom {
             });
             
             // 显示结果弹窗
-            if (typeof wx !== 'undefined') {
+            if (typeof wx !== 'undefined' && wx.showModal) {
                 wx.showModal({
                     title: '游戏结束',
                     content: resultMessage,
@@ -386,8 +366,11 @@ class GameRoom {
                         this.returnToWaitingRoom();
                     }
                 });
-            } else {
+            } else if (typeof alert !== 'undefined') {
                 alert(resultMessage);
+                this.returnToWaitingRoom();
+            } else {
+                console.log(resultMessage);
                 this.returnToWaitingRoom();
             }
         } else {
@@ -463,9 +446,12 @@ class GameRoom {
                 icon: 'none',
                 duration: 2000
             });
-        } else {
+        } else if (typeof alert !== 'undefined') {
             // 在浏览器环境中使用alert
             alert(message);
+        } else {
+            // 其他环境，输出到控制台
+            console.log("操作失败:", message);
         }
     }
     
@@ -498,10 +484,8 @@ class GameRoom {
     onSurrenderClick() {
         console.log("点击弃牌认输");
         
-        let shouldSurrender = false;
-        
         // 显示确认对话框
-        if (typeof wx !== 'undefined') {
+        if (typeof wx !== 'undefined' && wx.showModal) {
             wx.showModal({
                 title: '弃牌认输',
                 content: '确定要弃牌认输吗？这将结束游戏。',
@@ -511,11 +495,14 @@ class GameRoom {
                     }
                 }
             });
+        } else if (typeof confirm !== 'undefined') {
+            const shouldSurrender = confirm('确定要弃牌认输吗？这将结束游戏。');
+            if (shouldSurrender) {
+                this.sendSurrenderRequest();
+            }
         } else {
-            shouldSurrender = confirm('确定要弃牌认输吗？这将结束游戏。');
-        }
-        
-        if (shouldSurrender) {
+            // 其他环境直接认输
+            console.log("确定要弃牌认输吗？(默认选择是)");
             this.sendSurrenderRequest();
         }
     }
@@ -1455,6 +1442,14 @@ class GameRoom {
         });
         
         console.log(`[GameRoom] 出牌请求已发送到服务器`);
+    }
+    
+    // 更新画布尺寸
+    updateCanvasSize() {
+        if (this.isVisible) {
+            this.setupLayout();
+            this.render();
+        }
     }
 }
 

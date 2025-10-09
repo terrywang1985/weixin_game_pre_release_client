@@ -17,7 +17,7 @@ class NetworkManager {
         this.gatewayUrl = "";
         
         // 服务器配置
-        this.loginUrl = "http://localhost:8081/login";
+        this.loginUrl = "https://3qk7.com/login";
         this.websocketUrl = "";
         
         // 用户信息
@@ -76,7 +76,7 @@ class NetworkManager {
         };
         
         try {
-            const response = await this.httpRequest(this.loginUrl, {
+            const response = await this.request(this.loginUrl, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json'
@@ -192,26 +192,31 @@ class NetworkManager {
                 } else {
                     console.log("使用浏览器WebSocket API");
                     // 浏览器环境
-                    this.websocket = new WebSocket(this.websocketUrl);
-                    this.websocket.binaryType = 'arraybuffer';
-                    
-                    this.websocket.onopen = (event) => {
-                        this.onWebSocketOpen(event);
-                        resolve(true);
-                    };
-                    
-                    this.websocket.onmessage = (event) => {
-                        this.onWebSocketMessage(event);
-                    };
-                    
-                    this.websocket.onclose = (event) => {
-                        this.onWebSocketClose(event);
-                    };
-                    
-                    this.websocket.onerror = (event) => {
-                        this.onWebSocketError(event);
-                        reject(new Error("WebSocket连接失败"));
-                    };
+                    // 在微信小游戏中不支持浏览器WebSocket API，这里仅用于测试
+                    if (typeof WebSocket !== 'undefined') {
+                        this.websocket = new WebSocket(this.websocketUrl);
+                        this.websocket.binaryType = 'arraybuffer';
+                        
+                        this.websocket.onopen = (event) => {
+                            this.onWebSocketOpen(event);
+                            resolve(true);
+                        };
+                        
+                        this.websocket.onmessage = (event) => {
+                            this.onWebSocketMessage(event);
+                        };
+                        
+                        this.websocket.onclose = (event) => {
+                            this.onWebSocketClose(event);
+                        };
+                        
+                        this.websocket.onerror = (event) => {
+                            this.onWebSocketError(event);
+                            reject(new Error("WebSocket连接失败"));
+                        };
+                    } else {
+                        reject(new Error("WebSocket API不可用"));
+                    }
                 }
                 
             } catch (error) {
@@ -592,17 +597,18 @@ class NetworkManager {
         return `${timestamp}_${random1}_${random2}_${windowId}_${perfTime}`;
     }
     
-    // HTTP请求封装（微信小游戏环境）
-    httpRequest(url, options) {
+    // 网络请求方法 - 适配微信小游戏环境
+    request(url, options = {}) {
         return new Promise((resolve, reject) => {
+            // 微信小游戏环境中使用wx.request替代fetch
             if (typeof wx !== 'undefined' && wx.request) {
-                // 微信小游戏环境
                 wx.request({
                     url: url,
                     method: options.method || 'GET',
                     header: options.headers || {},
                     data: options.body ? JSON.parse(options.body) : {},
                     success: (res) => {
+                        // 微信小游戏的响应格式与fetch不同，需要适配
                         resolve(JSON.stringify(res.data));
                     },
                     fail: (error) => {
@@ -611,10 +617,15 @@ class NetworkManager {
                 });
             } else {
                 // 开发环境或其他环境，使用fetch
-                fetch(url, options)
-                    .then(response => response.text())
-                    .then(resolve)
-                    .catch(reject);
+                // 在微信小游戏中不支持fetch，这里仅用于测试
+                if (typeof fetch !== 'undefined') {
+                    fetch(url, options)
+                        .then(response => response.text())
+                        .then(resolve)
+                        .catch(reject);
+                } else {
+                    reject(new Error('网络请求API不可用'));
+                }
             }
         });
     }
