@@ -192,42 +192,86 @@ class HandCardArea {
         const rect = this.cardRects.find(r => r.index === index);
         if (!rect || !rect.visible) return;
         
-        // 确定卡牌颜色
-        let cardColor = '#2196F3'; // 默认蓝色
+        // 确定卡牌状态
         const isSelected = index === this.selectedCardIndex;
         const isHovered = index === this.hoveredCardIndex;
         
+        // 圆角半径
+        const radius = 10;
+        
+        this.ctx.save();
+        
+        // 绘制卡牌阴影
         if (isSelected) {
-            cardColor = this.config.selectedColor;
+            this.ctx.shadowColor = 'rgba(76, 175, 80, 0.6)';
+            this.ctx.shadowBlur = 15;
+            this.ctx.shadowOffsetY = 5;
         } else if (isHovered) {
-            cardColor = this.config.hoverColor;
+            this.ctx.shadowColor = 'rgba(0, 0, 0, 0.3)';
+            this.ctx.shadowBlur = 8;
+            this.ctx.shadowOffsetY = 3;
         }
         
-        // 绘制卡牌背景
-        this.ctx.fillStyle = cardColor;
-        this.ctx.fillRect(rect.x, rect.y, rect.width, rect.height);
+        // 绘制渐变背景
+        let gradient;
+        if (isSelected) {
+            gradient = this.ctx.createLinearGradient(rect.x, rect.y, rect.x, rect.y + rect.height);
+            gradient.addColorStop(0, '#66BB6A');
+            gradient.addColorStop(1, '#43A047');
+        } else if (isHovered) {
+            gradient = this.ctx.createLinearGradient(rect.x, rect.y, rect.x, rect.y + rect.height);
+            gradient.addColorStop(0, '#64B5F6');
+            gradient.addColorStop(1, '#42A5F5');
+        } else {
+            gradient = this.ctx.createLinearGradient(rect.x, rect.y, rect.x, rect.y + rect.height);
+            gradient.addColorStop(0, '#42A5F5');
+            gradient.addColorStop(1, '#1E88E5');
+        }
+        this.ctx.fillStyle = gradient;
+        
+        // 绘制圆角矩形
+        this.ctx.beginPath();
+        this.ctx.moveTo(rect.x + radius, rect.y);
+        this.ctx.lineTo(rect.x + rect.width - radius, rect.y);
+        this.ctx.quadraticCurveTo(rect.x + rect.width, rect.y, rect.x + rect.width, rect.y + radius);
+        this.ctx.lineTo(rect.x + rect.width, rect.y + rect.height - radius);
+        this.ctx.quadraticCurveTo(rect.x + rect.width, rect.y + rect.height, rect.x + rect.width - radius, rect.y + rect.height);
+        this.ctx.lineTo(rect.x + radius, rect.y + rect.height);
+        this.ctx.quadraticCurveTo(rect.x, rect.y + rect.height, rect.x, rect.y + rect.height - radius);
+        this.ctx.lineTo(rect.x, rect.y + radius);
+        this.ctx.quadraticCurveTo(rect.x, rect.y, rect.x + radius, rect.y);
+        this.ctx.closePath();
+        this.ctx.fill();
+        
+        // 重置阴影
+        this.ctx.shadowColor = 'transparent';
+        this.ctx.shadowBlur = 0;
+        this.ctx.shadowOffsetY = 0;
         
         // 绘制卡牌边框
-        this.ctx.strokeStyle = index === this.selectedCardIndex ? '#fff' : '#333';
-        this.ctx.lineWidth = index === this.selectedCardIndex ? 3 : 1;
-        this.ctx.strokeRect(rect.x, rect.y, rect.width, rect.height);
+        this.ctx.strokeStyle = isSelected ? '#FFEB3B' : 'rgba(255, 255, 255, 0.3)';
+        this.ctx.lineWidth = isSelected ? 3 : 2;
+        this.ctx.stroke();
+        
+        this.ctx.restore();
         
         // 绘制卡牌文字
         this.ctx.fillStyle = '#fff';
-        this.ctx.font = '12px Arial';
+        this.ctx.font = 'bold 14px "PingFang SC", "Microsoft YaHei", sans-serif';
         this.ctx.textAlign = 'center';
         this.ctx.textBaseline = 'middle';
         
-        // 绘制单词（主要内容）
-        const word = card.word || '未知';
-        this.ctx.fillText(word, rect.x + rect.width / 2, rect.y + rect.height / 2 - 5);
+        // 添加文字阴影
+        this.ctx.shadowColor = 'rgba(0, 0, 0, 0.5)';
+        this.ctx.shadowBlur = 3;
         
-        // 绘制词性（小字）
-        if (card.wordClass) {
-            this.ctx.font = '10px Arial';
-            this.ctx.fillStyle = '#ccc';
-            this.ctx.fillText(card.wordClass, rect.x + rect.width / 2, rect.y + rect.height / 2 + 15);
-        }
+        // 绘制单词（主要内容）- 居中显示
+        const word = card.word || '未知';
+        this.ctx.fillText(word, rect.x + rect.width / 2, rect.y + rect.height / 2);
+        
+        // 重置阴影
+        this.ctx.shadowColor = 'transparent';
+        this.ctx.shadowBlur = 0;
     }
     
     // 文字自动换行
@@ -432,8 +476,6 @@ class HandCardArea {
         if (x >= this.areaRect.x && x <= this.areaRect.x + this.areaRect.width &&
             y >= this.areaRect.y && y <= this.areaRect.y + this.areaRect.height) {
             
-            event.preventDefault();
-            
             if (event.deltaY > 0) {
                 this.scrollRight();
             } else {
@@ -457,7 +499,6 @@ class HandCardArea {
         // 检查是否在手牌区域内
         if (this.isInHandCardArea(x, y)) {
             this.startDrag(x);
-            event.preventDefault();
         }
     }
     
@@ -486,7 +527,6 @@ class HandCardArea {
             // 检查是否在手牌区域内
             if (this.isInHandCardArea(x, y)) {
                 this.startDrag(x);
-                event.preventDefault();
             }
         }
     }
@@ -506,7 +546,6 @@ class HandCardArea {
             }
             
             this.updateDrag(x);
-            event.preventDefault();
         }
     }
     
